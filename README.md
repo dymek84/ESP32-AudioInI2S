@@ -3,8 +3,9 @@ A simple MEMS I2S microphone and audio processing library for ESP32.
 
 ## Features
 * Simple I2S sample reading and setup. Just choose the pins, sample size and sample rate.
+* **Multiple Audio Processing Methods:** Choose between ArduinoFFT or Goertzel algorithm (see [PROCESSING_METHODS.md](./PROCESSING_METHODS.md))
 * Robust audio processing classes for analysis.
-  * Simple FFT compute on your I2S samples.
+  * Simple FFT/Goertzel compute on your I2S samples.
   * Frequency bands in 2, 4, 8, 16, 32 or 64 buckets.
   * Volume Unit Meter.
   * Set a noise floor to ignore values below it.
@@ -12,6 +13,13 @@ A simple MEMS I2S microphone and audio processing library for ESP32.
   * Auto level values for noisy/quiet enviroments where you want to keep values around the normalize max.
   * Ability to set the peak falloff rates and types. NO_FALLOFF, LINEAR_FALLOFF, ACCELERATE_FALLOFF, EXPONENTIAL_FALLOFF.
   * Equalizer to adjust the frequency levels for each bucket. Good for lowering the bass or treble response depending on the enviroment.
+
+## Audio Processing Methods
+This library supports two different audio processing approaches:
+- **ArduinoFFT** (Default) - Full spectrum analysis, flexible but more resource-intensive
+- **Goertzel** - Optimized for musical notes, faster and lower memory usage
+
+See [PROCESSING_METHODS.md](./PROCESSING_METHODS.md) for detailed comparison and usage instructions.
 
 #### [AudioInI2S Class README](./AudioInI2S.md)
   * [Basic](examples/Basic/Basic.ino) - Reads I2S microphone data to be viewed in the Serial Plotter.
@@ -33,12 +41,18 @@ A simple MEMS I2S microphone and audio processing library for ESP32.
 * INMP441 - MEMS Microphone
 
 ## Known Issues
-The `AudioAnalysis.h` and `AudioFrequencyAnalysis.h` classes are built on top of ArduinoFF2 V2 develop branch. You can find out more about it here: https://github.com/kosme/arduinoFFT/tree/develop
+The `AudioAnalysis.h` and `AudioFrequencyAnalysis.h` classes support two processing methods:
+- **ArduinoFFT** (default) - Built on top of ArduinoFFT V2 develop branch. You can find out more about it here: https://github.com/kosme/arduinoFFT/tree/develop
+- **Goertzel** - Self-contained implementation optimized for musical note frequencies
 
 `AudioAnalysis.h` is not optimized and uses a lot of helper variables and floats. That said it is still very responsive at 1024 sample size and 44100 sample rate.
 
+For better performance on resource-constrained devices, consider using the Goertzel method (see [PROCESSING_METHODS.md](./PROCESSING_METHODS.md)).
+
 ## Recognition
-This library's audio processing would not be possible without ArduinoFFT https://github.com/kosme/arduinoFFT
+This library's audio processing would not be possible without:
+- ArduinoFFT https://github.com/kosme/arduinoFFT (when using ArduinoFFT method)
+- Goertzel algorithm implementation (integrated for musical note analysis)
 
 ## Licensing 
 MIT Open Source - Free to use anywhere. 

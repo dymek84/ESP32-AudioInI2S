@@ -11,6 +11,17 @@
     https://github.com/sheaivey/ESP32-AudioInI2S
 */
 
+// Choose audio processing method:
+// Uncomment ONE of the following to select the processing method:
+// #define USE_ARDUINOFFT  // Use ArduinoFFT library (traditional FFT approach)
+// #define USE_GOERTZEL    // Use Goertzel algorithm (optimized for specific frequencies)
+
+// Default to ArduinoFFT if neither is defined
+#if !defined(USE_ARDUINOFFT) && !defined(USE_GOERTZEL)
+#define USE_ARDUINOFFT
+#endif
+
+#ifdef USE_ARDUINOFFT
 // arduinoFFT V2
 // See the develop branch on GitHub for the latest info and speedups.
 // https://github.com/kosme/arduinoFFT/tree/develop
@@ -19,6 +30,11 @@
 // #define FFT_SQRT_APPROXIMATION
 
 #include <arduinoFFT.h>
+#endif
+
+#ifdef USE_GOERTZEL
+#include "goertzel.h"
+#endif
 #ifndef SAMPLE_RATE
 #define SAMPLE_RATE 44100
 #endif
@@ -47,24 +63,23 @@ class AudioFrequencyAnalysis;
 class FrequencyRange
 {
 public:
-
   AudioFrequencyAnalysis *_audioInfo = nullptr;
 
-  FrequencyRange(); // full 0Hz - 20000Hz range
+  FrequencyRange();                                                   // full 0Hz - 20000Hz range
   FrequencyRange(uint16_t lowHz, uint16_t highHz, float scaling = 1); // scaling for equalizer
 
   void setAudioInfo(AudioFrequencyAnalysis *audioInfo);
 
   void loop(); // calculates the value for the current sample frame.
 
-  float getValue(); // returns the raw value
+  float getValue();                     // returns the raw value
   float getValue(float min, float max); // returns the calculated value
-  float getPeak(); // returns the raw peak
-  float getPeak(float min, float max); // returns the calculated peak
-  
+  float getPeak();                      // returns the raw peak
+  float getPeak(float min, float max);  // returns the calculated peak
+
   uint16_t getMaxFrequency(); // gets the max frequency in Hz within the range
-  float getMin(); // gets the lowest raw value in the range
-  float getMax(); // gets the highest raw value in the range
+  float getMin();             // gets the lowest raw value in the range
+  float getMax();             // gets the highest raw value in the range
 
   float _value = 0;
   float _peak = 0;
@@ -79,12 +94,12 @@ public:
   falloff_type _maxFalloffType = EXPONENTIAL_FALLOFF;
   float _maxFalloffRate = .000001;
   float _maxFallRate = 0; // -1 use analysis default
-  RollingAverage * _maxRollingAverage = nullptr;
-  
+  RollingAverage *_maxRollingAverage = nullptr;
+
   falloff_type _peakFalloffType = EXPONENTIAL_FALLOFF;
   float _peakFalloffRate = 2;
   float _peakFallRate = 0; // -1 use analysis default
-  RollingAverage * _peakRollingAverage = nullptr;
+  RollingAverage *_peakRollingAverage = nullptr;
 
   float mapAndClip(float x, float in_min, float in_max, float out_min, float out_max);
 
@@ -92,9 +107,8 @@ public:
   uint16_t _lowHz = 0;
   uint16_t _highHz = 20000;
   uint16_t _startSampleIndex = 0;
-  uint16_t _endSampleIndex = SAMPLE_SIZE/2;
+  uint16_t _endSampleIndex = SAMPLE_SIZE / 2;
 };
-
 
 class AudioFrequencyAnalysis
 {
@@ -107,13 +121,13 @@ public:
 
   void addFrequencyRange(FrequencyRange *_frequencyRange);
 
-  float *getReal();       // gets the Real values after FFT calculation
-  float *getImaginary();  // gets the imaginary values after FFT calculation  
-  int getSampleRate();    // gets current sample rate
-  int getSampleSize();    // gets current sample size
+  float *getReal();      // gets the Real values after FFT calculation
+  float *getImaginary(); // gets the imaginary values after FFT calculation
+  int getSampleRate();   // gets current sample rate
+  int getSampleSize();   // gets current sample size
 
   /* Band Frequency Functions */
-  void setNoiseFloor(float noiseFloor);                              // threshold before sounds are registered
+  void setNoiseFloor(float noiseFloor);                                // threshold before sounds are registered
   void normalize(bool normalize = true, float min = 0, float max = 1); // normalize all values and constrain to min/max.
 
   void autoLevel(falloff_type falloffType = EXPONENTIAL_FALLOFF, float falloffRate = 0.01, float min = 10, float max = -1); // auto ballance normalized values to ambient noise levels.
@@ -122,13 +136,14 @@ public:
   isNormalize();      // is normalize enabled
   bool isAutoLevel(); // is auto level enabled
 
-  float getSample(uint16_t index); // gets the raw sample value at index
+  float getSample(uint16_t index);                       // gets the raw sample value at index
   float getSample(uint16_t index, float min, float max); // calculates the normalized sample value at index
-  uint16_t getSampleTriggerIndex(); // finds the index of the first cross point at zero
-  float getSampleMin(); // gets the lowest raw value in the samples
-  float getSampleMax(); // gets the highest raw value in the samples
+  uint16_t getSampleTriggerIndex();                      // finds the index of the first cross point at zero
+  float getSampleMin();                                  // gets the lowest raw value in the samples
+  float getSampleMax();                                  // gets the highest raw value in the samples
 
-  int sampleSize() {
+  int sampleSize()
+  {
     return _sampleSize;
   }
 
@@ -142,7 +157,7 @@ public:
 
   falloff_type _sampleFalloffType = EXPONENTIAL_FALLOFF;
   float _sampleFalloffRate = 0.00001;
-  RollingAverage * _samplesRollingAverage = nullptr;
+  RollingAverage *_samplesRollingAverage = nullptr;
 
   float mapAndClip(float x, float in_min, float in_max, float out_min, float out_max);
 
@@ -165,7 +180,9 @@ public:
   float _samplesMax = 1;
   float _autoLevelSamplesMaxFalloffRate; // used for auto level calculation
 
+#ifdef USE_ARDUINOFFT
   ArduinoFFT<float> *_FFT = nullptr;
+#endif
 };
 
 float calculateFalloff(falloff_type falloffType, float falloffRate, float currentRate)
@@ -207,7 +224,8 @@ AudioFrequencyAnalysis::AudioFrequencyAnalysis()
   _samples = nullptr;
 }
 
-void AudioFrequencyAnalysis::addFrequencyRange(FrequencyRange *_frequencyRange) {
+void AudioFrequencyAnalysis::addFrequencyRange(FrequencyRange *_frequencyRange)
+{
   _frequencyRange->setAudioInfo(this);
   _frequencyRanges[_frequencyRangesLength] = _frequencyRange;
   _frequencyRangesLength++;
@@ -216,25 +234,42 @@ void AudioFrequencyAnalysis::addFrequencyRange(FrequencyRange *_frequencyRange) 
 void AudioFrequencyAnalysis::loop(int32_t *samples, int sampleSize, int sampleRate)
 {
   _samples = samples;
+
+#ifdef USE_ARDUINOFFT
   if (_FFT == nullptr || _sampleSize != sampleSize || _sampleRate != sampleRate)
   {
     _sampleSize = sampleSize;
     _sampleRate = sampleRate;
     _FFT = new ArduinoFFT<float>(_real, _imag, _sampleSize, _sampleRate, _weighingFactors);
   }
+#endif
 
-  if(_sampleFalloffType != ROLLING_AVERAGE_FALLOFF) {
+#ifdef USE_GOERTZEL
+  // Initialize Goertzel if needed
+  static bool goertzel_initialized = false;
+  if (!goertzel_initialized || _sampleSize != sampleSize || _sampleRate != sampleRate)
+  {
+    _sampleSize = sampleSize;
+    _sampleRate = sampleRate;
+    init_window_lookup();
+    init_goertzel_constants_musical();
+    goertzel_initialized = true;
+  }
+#endif
+
+  if (_sampleFalloffType != ROLLING_AVERAGE_FALLOFF)
+  {
     if (_isAutoLevel)
     {
       _autoLevelSamplesMaxFalloffRate = ::calculateFalloff(_sampleFalloffType, _sampleFalloffRate, _autoLevelSamplesMaxFalloffRate);
       _samplesMax -= _autoLevelSamplesMaxFalloffRate;
     }
   }
-  else if(_samplesRollingAverage == nullptr) {
+  else if (_samplesRollingAverage == nullptr)
+  {
     // create it;
     _samplesRollingAverage = new RollingAverage();
   }
-
 
   // prep samples for analysis
   for (int i = 0; i < _sampleSize; i++)
@@ -242,19 +277,23 @@ void AudioFrequencyAnalysis::loop(int32_t *samples, int sampleSize, int sampleRa
     _real[i] = samples[i];
     _imag[i] = 0;
     float v = abs(samples[i]);
-    if(_sampleFalloffType == ROLLING_AVERAGE_FALLOFF) {
+    if (_sampleFalloffType == ROLLING_AVERAGE_FALLOFF)
+    {
       float _temp = _samplesMax;
-      if(_samplesMax > v) {
+      if (_samplesMax > v)
+      {
         _temp = ((_samplesMax - v) * 0.5) + v; // bring max down over time
         //_temp *= 0.90; // bring max down by 10% over time
       }
-      else if(v > _samplesMax) {
+      else if (v > _samplesMax)
+      {
         _temp = v;
       }
       _samplesRollingAverage->addValue(_temp);
       _samplesMax = _samplesRollingAverage->getAverage();
     }
-    else {
+    else
+    {
       if (v > _samplesMax)
       {
         _samplesMax = v;
@@ -267,30 +306,53 @@ void AudioFrequencyAnalysis::loop(int32_t *samples, int sampleSize, int sampleRa
     }
   }
 
+#ifdef USE_ARDUINOFFT
   _FFT->dcRemoval();
   _FFT->windowing(FFTWindow::Hamming, FFTDirection::Forward, false); /* Weigh data (compensated) */
   _FFT->compute(FFTDirection::Forward);                              /* Compute FFT */
   _FFT->complexToMagnitude();                                        /* Compute magnitudes */
+#endif
 
+#ifdef USE_GOERTZEL
+  // Convert samples to float array for Goertzel
+  static float sample_history[SAMPLE_SIZE];
+  for (int i = 0; i < _sampleSize; i++)
+  {
+    sample_history[i] = _real[i] / (float)0x7FFF; // Normalize to -1.0 to 1.0
+  }
+
+  // Calculate magnitudes using Goertzel algorithm
+  calculate_magnitudes(sample_history, _sampleSize);
+
+  // Copy Goertzel results to _real array for compatibility with FrequencyRange
+  for (int i = 0; i < BAND_SIZE && i < _sampleSize / 2; i++)
+  {
+    _real[i] = spectrogram[i] * (float)(0xFFFF * 0xFF); // Scale to match FFT output range
+  }
+#endif
 
   uint8_t seen = 0;
   _min = 0xFFFFFFFF;
   _max = 0;
-  for(int i = 0; seen <_frequencyRangesLength && i < BAND_SIZE + BAND_SIZE_PADDING; i++) {
-    if(_frequencyRanges[i] != nullptr) {
+  for (int i = 0; seen < _frequencyRangesLength && i < BAND_SIZE + BAND_SIZE_PADDING; i++)
+  {
+    if (_frequencyRanges[i] != nullptr)
+    {
       _frequencyRanges[i]->loop();
       seen++;
-      if(!_frequencyRanges[i]->_inIsolation) {
-        if(_frequencyRanges[i]->_min < _min) {
+      if (!_frequencyRanges[i]->_inIsolation)
+      {
+        if (_frequencyRanges[i]->_min < _min)
+        {
           _min = _frequencyRanges[i]->_min;
         }
-        if(_frequencyRanges[i]->_max > _max) {
+        if (_frequencyRanges[i]->_max > _max)
+        {
           _max = _frequencyRanges[i]->_max;
         }
       }
     }
   }
-
 }
 
 int AudioFrequencyAnalysis::getSampleSize()
@@ -318,10 +380,10 @@ void AudioFrequencyAnalysis::setNoiseFloor(float noiseFloor)
   _noiseFloor = noiseFloor;
 }
 
-
 float AudioFrequencyAnalysis::mapAndClip(float x, float in_min, float in_max, float out_min, float out_max)
 {
-  if(in_max - in_min == 0) {
+  if (in_max - in_min == 0)
+  {
     in_max = 1; // divide by zero!
   }
 
@@ -342,7 +404,6 @@ float AudioFrequencyAnalysis::mapAndClip(float x, float in_min, float in_max, fl
   }
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
-
 
 void AudioFrequencyAnalysis::autoLevel(falloff_type falloffType, float falloffRate, float min, float max)
 {
@@ -397,7 +458,7 @@ uint16_t AudioFrequencyAnalysis::getSampleTriggerIndex()
     return 0;
   }
 #define ZERO_RANGE 0
-  for (int i = 0; i < (_sampleSize/2 - 1); i++)
+  for (int i = 0; i < (_sampleSize / 2 - 1); i++)
   {
     float a = _samples[i];
     float b = _samples[i + 1];
@@ -419,58 +480,68 @@ float AudioFrequencyAnalysis::getSampleMax()
   return _samplesMax;
 }
 
-
-
-FrequencyRange::FrequencyRange(uint16_t lowHz, uint16_t highHz, float scaling) {
+FrequencyRange::FrequencyRange(uint16_t lowHz, uint16_t highHz, float scaling)
+{
   _lowHz = lowHz;
   _highHz = highHz;
   _scaling = scaling;
 }
 
-void FrequencyRange::setAudioInfo(AudioFrequencyAnalysis *audioInfo) { // gets called from AudioFrequencyAnalysis::addFrequencyRange();
+void FrequencyRange::setAudioInfo(AudioFrequencyAnalysis *audioInfo)
+{ // gets called from AudioFrequencyAnalysis::addFrequencyRange();
   _audioInfo = audioInfo;
   // Calculate FFT index from frequency.
   float lowIndex = (float)(_lowHz * _audioInfo->_sampleSize) / (float)_audioInfo->_sampleRate;
   float highIndex = (float)(_highHz * _audioInfo->_sampleSize) / (float)_audioInfo->_sampleRate;
-  if(highIndex-lowIndex <= 1.0) {
+  if (highIndex - lowIndex <= 1.0)
+  {
     _startSampleIndex = floor(lowIndex);
     _endSampleIndex = _startSampleIndex + 1;
   }
-  else {
+  else
+  {
     _startSampleIndex = round(lowIndex);
     _endSampleIndex = round(highIndex);
   }
 }
 
-void FrequencyRange::loop() {
+void FrequencyRange::loop()
+{
   uint16_t offset = _startSampleIndex;
   uint16_t end = _endSampleIndex - _startSampleIndex;
 
-  if(_maxFalloffType != ROLLING_AVERAGE_FALLOFF) {
+  if (_maxFalloffType != ROLLING_AVERAGE_FALLOFF)
+  {
     _maxFallRate = calculateFalloff(_maxFalloffType, _maxFalloffRate, _maxFallRate);
     _max -= _maxFallRate;
-    if(_max < _peak) {
+    if (_max < _peak)
+    {
       _max = _peak;
     }
   }
-  else if(_maxRollingAverage == nullptr) {
+  else if (_maxRollingAverage == nullptr)
+  {
     // create it;
     _maxRollingAverage = new RollingAverage();
   }
-  
-  if(_max < _autoFloor) {
+
+  if (_max < _autoFloor)
+  {
     _max = _autoFloor; // prevents divide by zero
   }
 
   // apply peak fall rate
-  if(_peakFalloffType != ROLLING_AVERAGE_FALLOFF) {
+  if (_peakFalloffType != ROLLING_AVERAGE_FALLOFF)
+  {
     _peakFallRate = calculateFalloff(_peakFalloffType, _peakFalloffRate, _peakFallRate);
     _peak -= _peakFallRate;
-    if(_peak < _value) {
+    if (_peak < _value)
+    {
       _peak = _value;
     }
   }
-  else if(_peakRollingAverage == nullptr) {
+  else if (_peakRollingAverage == nullptr)
+  {
     // create it;
     _peakRollingAverage = new RollingAverage();
   }
@@ -492,18 +563,19 @@ void FrequencyRange::loop() {
 
     rv = rv < _audioInfo->_noiseFloor ? 0 : rv;
 
-    if(_highFrequencyRollOffCompensation > 0) {
+    if (_highFrequencyRollOffCompensation > 0)
+    {
       uint16_t frequency = (i * _audioInfo->_sampleRate) / _audioInfo->_sampleSize;
       rv = rv * pow(frequency, _highFrequencyRollOffCompensation);
     }
 
-    if(rv > maxRv) {
+    if (rv > maxRv)
+    {
       maxRv = rv;
       _maxIndex = i;
     }
     // combine band amplitudes for current band segment
     _value += rv;
-
   }
 
   // remove noise
@@ -512,19 +584,23 @@ void FrequencyRange::loop() {
     _value = 0;
   }
 
-  if(_peakFalloffType == ROLLING_AVERAGE_FALLOFF) {
+  if (_peakFalloffType == ROLLING_AVERAGE_FALLOFF)
+  {
     float _temp = _peak;
-    if(_peak > _value) {
+    if (_peak > _value)
+    {
       _temp = ((_peak - _value) * 0.5) + _value; // bring max down over time
       //_temp *= 0.90; // bring max down by 10% over time
     }
-    else if(_value > _peak) {
+    else if (_value > _peak)
+    {
       _temp = _value;
     }
     _peakRollingAverage->addValue(_temp);
     _peak = _peakRollingAverage->getAverage();
   }
-  else {
+  else
+  {
     if (_value > _peak)
     {
       _peakFallRate = 0;
@@ -533,20 +609,24 @@ void FrequencyRange::loop() {
   }
 
   // handle min/max
-  if(_maxFalloffType == ROLLING_AVERAGE_FALLOFF) {
+  if (_maxFalloffType == ROLLING_AVERAGE_FALLOFF)
+  {
     float _temp = _max;
-    if(_max > _value) {
+    if (_max > _value)
+    {
       _temp = ((_max - _value) * 0.5) + _value; // bring max down over time
       //_temp *= 0.90; // bring max down by 10% over time
     }
-    else if(_value > _max) {
+    else if (_value > _max)
+    {
       _temp = _value;
     }
 
     _maxRollingAverage->addValue(_temp);
     _max = _maxRollingAverage->getAverage();
   }
-  else {  
+  else
+  {
     if (_value > _max)
     {
       _maxFallRate = 0;
@@ -558,41 +638,51 @@ void FrequencyRange::loop() {
     _min = _value;
   }
 
-  if(_max < _audioInfo->_autoMin) {
+  if (_max < _audioInfo->_autoMin)
+  {
     _max = _audioInfo->_autoMin;
   }
 }
 
-float FrequencyRange::getMin() {
+float FrequencyRange::getMin()
+{
   return _min; // raw value
 }
 
-float FrequencyRange::getMax() {
+float FrequencyRange::getMax()
+{
   return _max; // raw value
 }
 
-uint16_t FrequencyRange::getMaxFrequency() {
-  if(_maxIndex == -1) {
+uint16_t FrequencyRange::getMaxFrequency()
+{
+  if (_maxIndex == -1)
+  {
     return 0;
   }
   return (_maxIndex * _audioInfo->_sampleRate) / _audioInfo->_sampleSize;
 }
 
-float FrequencyRange::getValue(float min, float max) {
-  if(!_inIsolation) {
+float FrequencyRange::getValue(float min, float max)
+{
+  if (!_inIsolation)
+  {
     return mapAndClip(_value, 0, _audioInfo->_max, min, max);
   }
   // normalize _min/_max
-  return mapAndClip(_value, 0, _max, min, max) ;
+  return mapAndClip(_value, 0, _max, min, max);
 }
 
-float FrequencyRange::getValue() {
+float FrequencyRange::getValue()
+{
   // apply scaling
   return _value;
 }
 
-float FrequencyRange::getPeak(float min, float max) {
-  if(!_inIsolation) {
+float FrequencyRange::getPeak(float min, float max)
+{
+  if (!_inIsolation)
+  {
     return mapAndClip(_peak, 0, _audioInfo->_max, min, max);
   }
 
@@ -600,15 +690,16 @@ float FrequencyRange::getPeak(float min, float max) {
   return mapAndClip(_peak, 0, _max, min, max);
 }
 
-
-float FrequencyRange::getPeak() {
+float FrequencyRange::getPeak()
+{
   // apply scaling
   return _peak;
 }
 
 float FrequencyRange::mapAndClip(float x, float in_min, float in_max, float out_min, float out_max)
 {
-  if(in_max - in_min == 0) {
+  if (in_max - in_min == 0)
+  {
     in_max = 1; // divide by zero!
   }
 
