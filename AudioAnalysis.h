@@ -15,7 +15,7 @@
 // #define USE_GOERTZEL    // Use Goertzel algorithm (optimized for specific frequencies)
 
 // Default to ArduinoFFT if neither is defined
-#if !defined(USE_ARDUINOFFT) && !defined(USE_GOERTZEL)
+#if !defined(USE_ARDUINOFFT) && !defined(`USE_GOERTZEL)
 #define USE_ARDUINOFFT
 #endif
 
@@ -323,10 +323,27 @@ void AudioAnalysis::computeFFT(int32_t *samples, int sampleSize, int sampleRate)
   // Calculate magnitudes using Goertzel algorithm
   calculate_magnitudes(sample_history, _sampleSize);
 
-  // Copy Goertzel results to _real array for compatibility
-  for (int i = 0; i < BAND_SIZE && i < _sampleSize / 2; i++)
+  // Map Goertzel bins (musical notes) onto linear FFT-style bins so downstream code keeps working
+  for (int i = 0; i < _sampleSize / 2; i++)
   {
-    _real[i] = spectrogram[i] * (float)(0xFFFF * 0xFF); // Scale to match FFT output range
+    // Frequency represented by this FFT-style bin
+    float bin_freq = (float)(i * _sampleRate) / (float)_sampleSize;
+
+    // Find closest Goertzel bin by frequency
+    float best_diff = 1e9;
+    uint16_t best_bin = 0;
+    for (uint16_t g = 0; g < BAND_SIZE; g++)
+    {
+      float diff = fabs(bin_freq - frequencies_musical[g].target_freq);
+      if (diff < best_diff)
+      {
+        best_diff = diff;
+        best_bin = g;
+      }
+    }
+
+    // Scale to roughly match FFT magnitude range
+    _real[i] = spectrogram[best_bin] * (float)(0xFFFF * 0xFF);
   }
 #endif
 }
