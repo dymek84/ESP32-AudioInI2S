@@ -199,12 +199,22 @@ inline float calculate_magnitude_of_bin(uint16_t bin_number, float *sample_histo
     float q2 = 0;
     float window_pos = 0.0;
 
-    const uint16_t block_size = frequencies_musical[bin_number].block_size;
+    // Clamp block size to available history to avoid reading out of bounds
+    uint16_t block_size = frequencies_musical[bin_number].block_size;
+    if (block_size > SAMPLE_HISTORY_LENGTH)
+    {
+        block_size = SAMPLE_HISTORY_LENGTH;
+    }
+    if (block_size < 4)
+    {
+        block_size = 4; // minimum useful window
+    }
 
     float coeff = frequencies_musical[bin_number].coeff;
     float window_step = frequencies_musical[bin_number].window_step;
 
-    float *sample_ptr = &sample_history[(SAMPLE_HISTORY_LENGTH - 1) - block_size];
+    // Use the most recent block_size samples; ensure start index is valid
+    float *sample_ptr = &sample_history[SAMPLE_HISTORY_LENGTH - block_size];
 
     for (uint16_t i = 0; i < block_size; i++)
     {
