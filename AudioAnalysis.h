@@ -15,7 +15,7 @@
 // #define USE_GOERTZEL    // Use Goertzel algorithm (optimized for specific frequencies)
 
 // Default to ArduinoFFT if neither is defined
-#if !defined(USE_ARDUINOFFT) && !defined(`USE_GOERTZEL)
+#if !defined(USE_ARDUINOFFT) && !defined(USE_GOERTZEL)
 #define USE_ARDUINOFFT
 #endif
 
@@ -557,6 +557,32 @@ void AudioAnalysis::computeFrequencies(uint8_t bandSize)
   _bandMinIndex = -1;
   _peakMaxIndex = -1;
   _peakMinIndex = -1;
+
+#ifdef USE_GOERTZEL
+  // For Goertzel mode, read directly from spectrogram[] array
+  // which contains 64 musical note frequency bands (0.0 to 1.0)
+  for (int i = 0; i < _bandSize; i++)
+  {
+    // handle band peaks fall off
+    _peakFallRate[i] = calculateFalloff(_bandPeakFalloffType, _bandPeakFalloffRate, _peakFallRate[i]);
+    if (_peaks[i] - _peakFallRate[i] <= _bands[i])
+    {
+      _peaks[i] = _bands[i];
+    }
+    else
+    {
+      _peaks[i] -= _peakFallRate[i]; // fall off rate
+    }
+
+    // Read directly from Goertzel spectrogram and scale to 0-255 range
+    float rv = spectrogram[i] * 255.0f;
+    rv = rv * _bandEq[i];
+    rv = rv < _noiseFloor ? 0 : rv;
+    _bands[i] = rv;
+    _vu += rv;
+
+#else
+  // FFT mode - use frequency bin offsets
   int offset = 2; // first two values are noise
   for (int i = 0; i < _bandSize; i++)
   {
@@ -590,6 +616,7 @@ void AudioAnalysis::computeFrequencies(uint8_t bandSize)
       _vu += rv;
     }
     offset += ceil(_frequencyOffsets[i]);
+#endif
 
     // remove noise
     if (_bands[i] < _noiseFloor)
