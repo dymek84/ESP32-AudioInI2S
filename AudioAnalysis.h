@@ -292,7 +292,7 @@ void AudioAnalysis::computeFFT(int32_t *samples, int sampleSize, int sampleRate)
   // prep samples for analysis
   for (int i = 0; i < _sampleSize; i++)
   {
-    _real[i] = samples[i];
+    _real[i] = samples[i] >> 8;
     _imag[i] = 0;
     if (abs(samples[i]) > _samplesMax)
     {
