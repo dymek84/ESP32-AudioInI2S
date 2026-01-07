@@ -15,7 +15,7 @@
 // #define USE_GOERTZEL    // Use Goertzel algorithm (optimized for specific frequencies)
 
 // Default to ArduinoFFT if neither is defined
-#if !defined(USE_ARDUINOFFT) && !defined(`USE_GOERTZEL)
+#if !defined(USE_ARDUINOFFT) && !defined(USE_GOERTZEL)
 #define USE_ARDUINOFFT
 #endif
 
