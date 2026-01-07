@@ -11,17 +11,10 @@
     https://github.com/sheaivey/ESP32-AudioInI2S
 */
 
-// Choose audio processing method:
-// Uncomment ONE of the following to select the processing method:
-// #define USE_ARDUINOFFT  // Use ArduinoFFT library (traditional FFT approach)
-// #define USE_GOERTZEL    // Use Goertzel algorithm (optimized for specific frequencies)
+// Both ArduinoFFT and Goertzel are available simultaneously
+// Use getReal()/getImaginary() for FFT results
+// Use getGoertzel()/getGoertzelBand() for Goertzel results
 
-// Default to ArduinoFFT if neither is defined
-#if !defined(USE_ARDUINOFFT) && !defined(USE_GOERTZEL)
-#define USE_ARDUINOFFT
-#endif
-
-#ifdef USE_ARDUINOFFT
 // arduinoFFT V2
 // See the develop branch on GitHub for the latest info and speedups.
 // https://github.com/kosme/arduinoFFT/tree/develop
@@ -30,11 +23,7 @@
 // #define FFT_SQRT_APPROXIMATION
 
 #include <arduinoFFT.h>
-#endif
-
-#ifdef USE_GOERTZEL
 #include "goertzel.h"
-#endif
 #ifndef SAMPLE_RATE
 #define SAMPLE_RATE 44100
 #endif
@@ -126,6 +115,13 @@ public:
   int getSampleRate();   // gets current sample rate
   int getSampleSize();   // gets current sample size
 
+  /* Goertzel Functions */
+  float *getGoertzel();                      // gets the Goertzel spectrogram array (64 musical note bins)
+  float getGoertzelBand(uint8_t index);      // gets the Goertzel magnitude at index (0-63)
+  float getGoertzelFrequency(uint8_t index); // gets the frequency in Hz for Goertzel band index
+  float *getGoertzelSmooth();                // gets the smoothed Goertzel spectrogram
+  float *getChromagram();                    // gets the chromagram (12 pitch classes)
+
   /* Band Frequency Functions */
   void setNoiseFloor(float noiseFloor);                                // threshold before sounds are registered
   void normalize(bool normalize = true, float min = 0, float max = 1); // normalize all values and constrain to min/max.
@@ -180,9 +176,8 @@ public:
   float _samplesMax = 1;
   float _autoLevelSamplesMaxFalloffRate; // used for auto level calculation
 
-#ifdef USE_ARDUINOFFT
   ArduinoFFT<float> *_FFT = nullptr;
-#endif
+  bool _goertzelInitialized = false;
 };
 
 float calculateFalloff(falloff_type falloffType, float falloffRate, float currentRate)
@@ -235,27 +230,23 @@ void AudioFrequencyAnalysis::loop(int32_t *samples, int sampleSize, int sampleRa
 {
   _samples = samples;
 
-#ifdef USE_ARDUINOFFT
+  // Initialize ArduinoFFT if needed
   if (_FFT == nullptr || _sampleSize != sampleSize || _sampleRate != sampleRate)
   {
     _sampleSize = sampleSize;
     _sampleRate = sampleRate;
     _FFT = new ArduinoFFT<float>(_real, _imag, _sampleSize, _sampleRate, _weighingFactors);
   }
-#endif
 
-#ifdef USE_GOERTZEL
   // Initialize Goertzel if needed
-  static bool goertzel_initialized = false;
-  if (!goertzel_initialized || _sampleSize != sampleSize || _sampleRate != sampleRate)
+  if (!_goertzelInitialized || _sampleSize != sampleSize || _sampleRate != sampleRate)
   {
     _sampleSize = sampleSize;
     _sampleRate = sampleRate;
     init_window_lookup();
     init_goertzel_constants_musical();
-    goertzel_initialized = true;
+    _goertzelInitialized = true;
   }
-#endif
 
   if (_sampleFalloffType != ROLLING_AVERAGE_FALLOFF)
   {
@@ -306,47 +297,19 @@ void AudioFrequencyAnalysis::loop(int32_t *samples, int sampleSize, int sampleRa
     }
   }
 
-#ifdef USE_ARDUINOFFT
+  // Run ArduinoFFT
   _FFT->dcRemoval();
   _FFT->windowing(FFTWindow::Hamming, FFTDirection::Forward, false); /* Weigh data (compensated) */
   _FFT->compute(FFTDirection::Forward);                              /* Compute FFT */
   _FFT->complexToMagnitude();                                        /* Compute magnitudes */
-#endif
 
-#ifdef USE_GOERTZEL
-  // Convert samples to float array for Goertzel
+  // Run Goertzel (results stored in global spectrogram[] array)
   static float sample_history[SAMPLE_SIZE];
   for (int i = 0; i < _sampleSize; i++)
   {
-    sample_history[i] = _real[i] / (float)0x7FFF; // Normalize to -1.0 to 1.0
+    sample_history[i] = samples[i] / (float)0x7FFF; // Normalize to -1.0 to 1.0
   }
-
-  // Calculate magnitudes using Goertzel algorithm
   calculate_magnitudes(sample_history, _sampleSize);
-
-  // Map Goertzel bins (musical notes) onto linear FFT-style bins so FrequencyRange keeps working
-  for (int i = 0; i < _sampleSize / 2; i++)
-  {
-    // Frequency represented by this FFT-style bin
-    float bin_freq = (float)(i * _sampleRate) / (float)_sampleSize;
-
-    // Find closest Goertzel bin by frequency
-    float best_diff = 1e9;
-    uint16_t best_bin = 0;
-    for (uint16_t g = 0; g < BAND_SIZE; g++)
-    {
-      float diff = fabs(bin_freq - frequencies_musical[g].target_freq);
-      if (diff < best_diff)
-      {
-        best_diff = diff;
-        best_bin = g;
-      }
-    }
-
-    // Scale to roughly match FFT magnitude range
-    _real[i] = spectrogram[best_bin] * (float)(0xFFFF * 0xFF);
-  }
-#endif
 
   uint8_t seen = 0;
   _min = 0xFFFFFFFF;
@@ -390,6 +353,37 @@ float *AudioFrequencyAnalysis::getReal()
 float *AudioFrequencyAnalysis::getImaginary()
 {
   return _imag;
+}
+
+/* Goertzel API implementations */
+float *AudioFrequencyAnalysis::getGoertzel()
+{
+  return spectrogram; // returns the 64-bin Goertzel spectrogram
+}
+
+float AudioFrequencyAnalysis::getGoertzelBand(uint8_t index)
+{
+  if (index >= BAND_SIZE)
+    return 0;
+  return spectrogram[index];
+}
+
+float AudioFrequencyAnalysis::getGoertzelFrequency(uint8_t index)
+{
+  if (index >= BAND_SIZE)
+    return 0;
+  return frequencies_musical[index].target_freq;
+}
+
+float *AudioFrequencyAnalysis::getGoertzelSmooth()
+{
+  return spectrogram_smooth; // returns smoothed spectrogram
+}
+
+float *AudioFrequencyAnalysis::getChromagram()
+{
+  get_chromagram();  // update chromagram
+  return chromagram; // returns 12-bin chromagram (pitch classes)
 }
 
 void AudioFrequencyAnalysis::setNoiseFloor(float noiseFloor)
