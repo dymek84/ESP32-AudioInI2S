@@ -272,24 +272,7 @@ void AudioAnalysis::computeFFT(int32_t *samples, int sampleSize, int sampleRate)
     _autoLevelSamplesMaxFalloffRate = calculateFalloff(_sampleLevelFalloffType, _sampleLevelFalloffRate, _autoLevelSamplesMaxFalloffRate);
     _samplesMax -= _autoLevelSamplesMaxFalloffRate;
   }
-#ifdef USE_GOERTZEL
-  for (int i = 0; i < _sampleSize; i++)
-  {
-    _real[i] = samples[i] >> 8;
-    _imag[i] = 0;
-    if (abs(samples[i]) > _samplesMax)
-    {
-      _samplesMax = abs(samples[i]);
-      _autoLevelSamplesMaxFalloffRate = 0;
-    }
-    if (abs(samples[i]) < _samplesMin)
-    {
-      _samplesMin = abs(samples[i]);
-    }
-  }
-#endif
 
-#ifdef USE_ARDUINOFFT
   // prep samples for analysis
   for (int i = 0; i < _sampleSize; i++)
   {
@@ -306,7 +289,7 @@ void AudioAnalysis::computeFFT(int32_t *samples, int sampleSize, int sampleRate)
     }
   }
 
-#ifdef USE_ARDUINOFFT
+  // Run ArduinoFFT
   _FFT->dcRemoval();
   _FFT->windowing(FFTWindow::Hamming, FFTDirection::Forward, false); /* Weigh data (compensated) */
   _FFT->compute(FFTDirection::Forward);                              /* Compute FFT */
