@@ -288,8 +288,7 @@ void AudioAnalysis::computeFFT(int32_t *samples, int sampleSize, int sampleRate)
     //   _samplesMax = _autoMin * 0x1FFFF;
     // }
   }
-
-  // prep samples for analysis
+#ifdef USE_GOERTZEL
   for (int i = 0; i < _sampleSize; i++)
   {
     _real[i] = samples[i] >> 8;
@@ -304,8 +303,25 @@ void AudioAnalysis::computeFFT(int32_t *samples, int sampleSize, int sampleRate)
       _samplesMin = abs(samples[i]);
     }
   }
+#endif
 
 #ifdef USE_ARDUINOFFT
+  // prep samples for analysis
+  for (int i = 0; i < _sampleSize; i++)
+  {
+    _real[i] = samples[i];
+    _imag[i] = 0;
+    if (abs(samples[i]) > _samplesMax)
+    {
+      _samplesMax = abs(samples[i]);
+      _autoLevelSamplesMaxFalloffRate = 0;
+    }
+    if (abs(samples[i]) < _samplesMin)
+    {
+      _samplesMin = abs(samples[i]);
+    }
+  }
+
   _FFT->dcRemoval();
   _FFT->windowing(FFTWindow::Hamming, FFTDirection::Forward, false); /* Weigh data (compensated) */
   _FFT->compute(FFTDirection::Forward);                              /* Compute FFT */
