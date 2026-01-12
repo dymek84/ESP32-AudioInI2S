@@ -58,6 +58,10 @@ public:
   float *getGoertzelSmooth();                // gets the smoothed Goertzel spectrogram
   float *getChromagram();                    // gets the chromagram (12 pitch classes)
 
+  /* Microphone Sensitivity */
+  void setMicSens(float sensitivity); // set microphone sensitivity/gain (0.5 to 10.0, default 1.0) - does not affect AGC
+  float getMicSens();                 // get current microphone sensitivity
+
   /* Band Frequency Functions */
   void setNoiseFloor(float noiseFloor);                                // threshold before sounds are registered
   void computeFrequencies(uint8_t bandSize = -1);                      // converts FFT data into frequency bands
@@ -137,6 +141,8 @@ protected:
   bool _isNormalize = false;
   float _normalMin = 0;
   float _normalMax = 1;
+
+  float _micSens = 1.0f; // microphone sensitivity/gain multiplier (0.5 to 10.0)
 
   falloff_type _bandPeakFalloffType = EXPONENTIAL_FALLOFF;
   float _bandPeakFalloffRate = 0.5;
@@ -273,10 +279,10 @@ void AudioAnalysis::computeFFT(int32_t *samples, int sampleSize, int sampleRate)
     _samplesMax -= _autoLevelSamplesMaxFalloffRate;
   }
 
-  // prep samples for analysis
+  // prep samples for analysis (apply mic sensitivity before AGC tracking)
   for (int i = 0; i < _sampleSize; i++)
   {
-    _real[i] = samples[i];
+    _real[i] = samples[i] * _micSens;
     _imag[i] = 0;
     if (abs(samples[i]) > _samplesMax)
     {
@@ -299,9 +305,24 @@ void AudioAnalysis::computeFFT(int32_t *samples, int sampleSize, int sampleRate)
   static float sample_history[SAMPLE_SIZE];
   for (int i = 0; i < _sampleSize; i++)
   {
-    sample_history[i] = samples[i] / (float)0x7FFF; // Normalize to -1.0 to 1.0
+    sample_history[i] = (samples[i] * _micSens) / (float)0x7FFF; // Normalize to -1.0 to 1.0 with mic sensitivity
   }
   calculate_magnitudes(sample_history, _sampleSize);
+}
+
+void AudioAnalysis::setMicSens(float sensitivity)
+{
+  // Constrain sensitivity to valid range
+  if (sensitivity < 0.5f)
+    sensitivity = 0.5f;
+  if (sensitivity > 10.0f)
+    sensitivity = 10.0f;
+  _micSens = sensitivity;
+}
+
+float AudioAnalysis::getMicSens()
+{
+  return _micSens;
 }
 
 float *AudioAnalysis::getReal()
@@ -545,30 +566,6 @@ void AudioAnalysis::computeFrequencies(uint8_t bandSize)
   _peakMaxIndex = -1;
   _peakMinIndex = -1;
 
-#ifdef USE_GOERTZEL
-  // For Goertzel mode, read directly from spectrogram[] array
-  // which contains 64 musical note frequency bands (0.0 to 1.0)
-  for (int i = 0; i < _bandSize; i++)
-  {
-    // handle band peaks fall off
-    _peakFallRate[i] = calculateFalloff(_bandPeakFalloffType, _bandPeakFalloffRate, _peakFallRate[i]);
-    if (_peaks[i] - _peakFallRate[i] <= _bands[i])
-    {
-      _peaks[i] = _bands[i];
-    }
-    else
-    {
-      _peaks[i] -= _peakFallRate[i]; // fall off rate
-    }
-
-    // Read directly from Goertzel spectrogram and scale to 0-255 range
-    float rv = spectrogram[i] * 255.0f;
-    rv = rv * _bandEq[i];
-    rv = rv < _noiseFloor ? 0 : rv;
-    _bands[i] = rv;
-    _vu += rv;
-
-#else
   // FFT mode - use frequency bin offsets
   int offset = 2; // first two values are noise
   for (int i = 0; i < _bandSize; i++)
@@ -603,7 +600,6 @@ void AudioAnalysis::computeFrequencies(uint8_t bandSize)
       _vu += rv;
     }
     offset += ceil(_frequencyOffsets[i]);
-#endif
 
     // remove noise
     if (_bands[i] < _noiseFloor)
